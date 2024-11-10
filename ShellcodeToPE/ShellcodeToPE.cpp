@@ -1,14 +1,12 @@
-// pe_builder_pointer.cpp
 #include "windows.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include "./ShellcodeToPE.h"
 
-
-
+// Initialize the IMAGE_DOS_HEADER structure
 void set_image_dos_header(IMAGE_DOS_HEADER* header, LONG elfanew_offset) {
-    header->e_magic = IMAGE_DOS_SIGNATURE; // 'MZ'
+    header->e_magic = IMAGE_DOS_SIGNATURE;
     header->e_cblp = 0x0090;
     header->e_cp = 0x0003;
     header->e_crlc = 0x0000;
@@ -29,17 +27,18 @@ void set_image_dos_header(IMAGE_DOS_HEADER* header, LONG elfanew_offset) {
     header->e_lfanew = elfanew_offset;
 }
 
+// Set the DOS stub message
 void set_image_dos_stub(PVOID stub) {
     const char dos_msg[] = "This program cannot be run in DOS mode.\r\n$";
     std::memcpy(stub, dos_msg, min(DOS_STUB_SIZE, sizeof(dos_msg)));
 }
 
+// Initialize the IMAGE_FILE_HEADER structure
 void set_image_file_header(IMAGE_FILE_HEADER* header, WORD num_of_sections, bool is_64) {
     if (is_64) {
         header->Machine = IMAGE_FILE_MACHINE_AMD64;
         header->SizeOfOptionalHeader = sizeof(IMAGE_OPTIONAL_HEADER64);
-    }
-    else {
+    } else {
         header->Machine = IMAGE_FILE_MACHINE_I386;
         header->SizeOfOptionalHeader = sizeof(IMAGE_OPTIONAL_HEADER32);
     }
@@ -50,11 +49,13 @@ void set_image_file_header(IMAGE_FILE_HEADER* header, WORD num_of_sections, bool
     header->Characteristics = IMAGE_FILE_EXECUTABLE_IMAGE;
 }
 
+// Initialize an IMAGE_DATA_DIRECTORY entry
 void set_image_data_directory(IMAGE_DATA_DIRECTORY* dir) {
     dir->VirtualAddress = 0;
     dir->Size = 0;
 }
 
+// Initialize the IMAGE_OPTIONAL_HEADER64 structure
 void set_image_optional_header64(IMAGE_OPTIONAL_HEADER64* header,
     DWORD code_size,
     DWORD address_of_entry_point,
@@ -89,12 +90,13 @@ void set_image_optional_header64(IMAGE_OPTIONAL_HEADER64* header,
     header->LoaderFlags = 0;
     header->NumberOfRvaAndSizes = IMAGE_NUMBEROF_DIRECTORY_ENTRIES;
 
-    // Initialize all data directories to empty
+    // Initialize data directories
     for (int i = 0; i < IMAGE_NUMBEROF_DIRECTORY_ENTRIES; i++) {
         set_image_data_directory(&header->DataDirectory[i]);
     }
 }
 
+// Initialize the IMAGE_OPTIONAL_HEADER32 structure
 void set_image_optional_header32(IMAGE_OPTIONAL_HEADER32* header,
     DWORD code_size,
     DWORD address_of_entry_point,
@@ -130,12 +132,13 @@ void set_image_optional_header32(IMAGE_OPTIONAL_HEADER32* header,
     header->LoaderFlags = 0;
     header->NumberOfRvaAndSizes = IMAGE_NUMBEROF_DIRECTORY_ENTRIES;
 
-    // Initialize all data directories to empty
+    // Initialize data directories
     for (int i = 0; i < IMAGE_NUMBEROF_DIRECTORY_ENTRIES; i++) {
         set_image_data_directory(&header->DataDirectory[i]);
     }
 }
 
+// Initialize the IMAGE_NT_HEADERS64 structure
 void set_image_nt_headers64(IMAGE_NT_HEADERS64* nt_headers,
     WORD num_of_sections,
     DWORD code_size,
@@ -149,6 +152,7 @@ void set_image_nt_headers64(IMAGE_NT_HEADERS64* nt_headers,
         size_of_image);
 }
 
+// Initialize the IMAGE_NT_HEADERS32 structure
 void set_image_nt_headers32(IMAGE_NT_HEADERS32* nt_headers,
     WORD num_of_sections,
     DWORD code_size,
@@ -162,6 +166,7 @@ void set_image_nt_headers32(IMAGE_NT_HEADERS32* nt_headers,
         size_of_image);
 }
 
+// Initialize the IMAGE_SECTION_HEADER structure
 void set_image_section_header(IMAGE_SECTION_HEADER* header,
     const char* section,
     DWORD virtual_size,
@@ -183,12 +188,12 @@ void set_image_section_header(IMAGE_SECTION_HEADER* header,
     header->Characteristics = characteristics;
 }
 
-// Converts shellcode into a PE executable (x86 or x64 based on is_64)
+// Convert shellcode into a PE executable
 std::vector<unsigned char> shellcode_to_exe(const char* shellcode, size_t shellcode_size, bool is_64) {
     const size_t dos_hdr_size = sizeof(IMAGE_DOS_HEADER);
     const size_t nt_hdrs_size = is_64 ? sizeof(IMAGE_NT_HEADERS64) : sizeof(IMAGE_NT_HEADERS32);
     const size_t section_hdr_size = sizeof(IMAGE_SECTION_HEADER);
-    const size_t headers_size = 0x400; // SizeOfHeaders is typically 0x400
+    const size_t headers_size = 0x400;
 
     DWORD section_alignment = SECTION_ALIGNMENT;
     DWORD size_of_image = section_alignment + ((DWORD)shellcode_size + section_alignment - 1) / section_alignment * section_alignment;
@@ -196,7 +201,6 @@ std::vector<unsigned char> shellcode_to_exe(const char* shellcode, size_t shellc
     size_t buf_size = headers_size + shellcode_size;
     std::vector<unsigned char> buf(buf_size, 0);
 
-    // Set IMAGE_DOS_HEADER
     IMAGE_DOS_HEADER dos_header = {};
     set_image_dos_header(&dos_header, static_cast<LONG>(dos_hdr_size + DOS_STUB_SIZE));
     std::memcpy(buf.data(), &dos_header, dos_hdr_size);
@@ -204,46 +208,39 @@ std::vector<unsigned char> shellcode_to_exe(const char* shellcode, size_t shellc
     set_image_dos_stub(buf.data() + dos_hdr_size);
 
     if (is_64) {
-        // Set IMAGE_NT_HEADERS64
         IMAGE_NT_HEADERS64 nt_headers = {};
         set_image_nt_headers64(&nt_headers, 1, (DWORD)shellcode_size, 0x1000, size_of_image);
         std::memcpy(buf.data() + dos_header.e_lfanew, &nt_headers, nt_hdrs_size);
-    }
-    else {
-        // Set IMAGE_NT_HEADERS32
+    } else {
         IMAGE_NT_HEADERS32 nt_headers = {};
         set_image_nt_headers32(&nt_headers, 1, (DWORD)shellcode_size, 0x1000, size_of_image);
         std::memcpy(buf.data() + dos_header.e_lfanew, &nt_headers, nt_hdrs_size);
     }
 
-    // Set IMAGE_SECTION_HEADER
     IMAGE_SECTION_HEADER section_header = {};
     set_image_section_header(&section_header, ".text", (DWORD)shellcode_size, 0x1000, (DWORD)shellcode_size, (DWORD)headers_size, IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ | IMAGE_SCN_CNT_CODE);
     std::memcpy(buf.data() + dos_header.e_lfanew + nt_hdrs_size, &section_header, sizeof(section_header));
 
-    // Copy shellcode to buffer
     std::memcpy(buf.data() + headers_size, shellcode, shellcode_size);
 
     return buf;
 }
 
+// Parse command-line arguments
 bool parse_arguments(int argc, char* argv[], std::string& output_file, std::string& shellcode_file, bool& is_64) {
     output_file = "output.exe";
-    is_64 = true; // Default to x64
+    is_64 = true;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-out") == 0 && i + 1 < argc) {
             output_file = argv[++i];
-        }
-        else if (strcmp(argv[i], "-shellcode") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "-shellcode") == 0 && i + 1 < argc) {
             shellcode_file = argv[++i];
-        }
-        else if (strcmp(argv[i], "-arch") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "-arch") == 0 && i + 1 < argc) {
             std::string arch_str = argv[++i];
             if (arch_str == "x86") {
                 is_64 = false;
-            }
-            else if (arch_str != "x64") {
+            } else if (arch_str != "x64") {
                 std::cerr << "Invalid architecture specified. Use 'x86' or 'x64'.\n";
                 return false;
             }
@@ -310,3 +307,4 @@ int main(int argc, char* argv[]) {
     std::cout << "Executable created successfully: " << output_path << "\n";
     return 0;
 }
+
