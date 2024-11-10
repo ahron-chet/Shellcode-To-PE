@@ -1,0 +1,7 @@
+#pragma once
+#define IMAGE_BASE 0x400000
+#define SECTION_ALIGNMENT 0x1000
+#define FILE_ALIGNMENT 0x200
+#define MAJOR_SUBSYSTEM_VERSION 6
+#define SIGNATURE 0x00004550 // 'PE\0\0'
+const size_t DOS_STUB_SIZE = 64;
